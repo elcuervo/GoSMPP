@@ -5,35 +5,35 @@
 package smpp
 
 import (
-	"os"
 	"bufio"
-	"reflect"
+	"errors"
 	"fmt"
+	"reflect"
 )
 
 // PDU interface which all PDU types should implement
 type PDU interface {
 	// Read the PDU from the buffer
-	read(r *bufio.Reader) (err os.Error)
-	
+	read(r *bufio.Reader) (err error)
+
 	// Write the PDU to the buffer
-	write(w *bufio.Writer) (err os.Error)
-	
+	write(w *bufio.Writer) (err error)
+
 	// Set the packet header
 	setHeader(hdr *PDUHeader)
-	
+
 	// Get the packet header
 	GetHeader() *PDUHeader
-	
+
 	// Get the struct
 	GetStruct() interface{}
 }
 
 // Common PDU functions & fields
 type PDUCommon struct {
-	Header		*PDUHeader
-	Optional	OptParams
-	OptionalLen	uint32
+	Header      *PDUHeader
+	Optional    OptParams
+	OptionalLen uint32
 }
 
 // Set header
@@ -52,26 +52,26 @@ func (pdu *PDUCommon) GetStruct() interface{} {
 }
 
 // Write Optional Params
-func (pdu *PDUCommon) writeOptional(w *bufio.Writer) (err os.Error) {
+func (pdu *PDUCommon) writeOptional(w *bufio.Writer) (err error) {
 	if len(pdu.Optional) > 0 {
 		for key, val := range pdu.Optional {
 			op := new(pduOptParam)
 			op.tag = uint16(key)
 			op.value = val
-			v := reflect.NewValue(val)
-			switch t := v.(type) {
-				case *reflect.StringValue:
-					op.length = uint16(len(val.(string)))
-				case *reflect.BoolValue:
-					op.length = 1
-				case *reflect.Uint8Value:
-					op.length = 1
-				case *reflect.Uint16Value:
-					op.length = 2
-				case *reflect.Uint32Value:
-					op.length = 4
-				case *reflect.Uint64Value:
-					op.length = 8
+			v := reflect.ValueOf(val)
+			switch t := v; t.Kind() {
+			case reflect.String:
+				op.length = uint16(len(val.(string)))
+			case reflect.Bool:
+				op.length = 1
+			case reflect.Uint8:
+				op.length = 1
+			case reflect.Uint16:
+				op.length = 2
+			case reflect.Uint32:
+				op.length = 4
+			case reflect.Uint64:
+				op.length = 8
 			}
 			err = op.write(w)
 			if err != nil {
@@ -85,130 +85,130 @@ func (pdu *PDUCommon) writeOptional(w *bufio.Writer) (err os.Error) {
 // Bind PDU
 type PDUBind struct {
 	PDUCommon
-	SystemId	string
-	Password	string
-	SystemType	string
-	IfVersion	uint8
-	AddrTon		SMPPTypeOfNumber
-	AddrNpi		SMPPNumericPlanIndicator
-	AddressRange	string
+	SystemId     string
+	Password     string
+	SystemType   string
+	IfVersion    uint8
+	AddrTon      SMPPTypeOfNumber
+	AddrNpi      SMPPNumericPlanIndicator
+	AddressRange string
 }
 
 // Read Bind PDU
-func (pdu *PDUBind) read(r *bufio.Reader) (err os.Error) {
+func (pdu *PDUBind) read(r *bufio.Reader) (err error) {
 	// Read system id (null terminated string or null)
 	line, err := r.ReadBytes(0x00)
 	if err != nil {
-		err = os.NewError("Bind: Error reading system id")
+		err = errors.New("Bind: Error reading system id")
 		return
 	}
 	if len(line) > 1 {
-		pdu.SystemId = string(line[0:len(line) - 1])
+		pdu.SystemId = string(line[0 : len(line)-1])
 	}
 	// Read Password (null terminated string or null)
 	line, err = r.ReadBytes(0x00)
 	if err != nil {
-		err = os.NewError("Bind: Error reading Password")
+		err = errors.New("Bind: Error reading Password")
 		return
 	}
 	if len(line) > 1 {
-		pdu.Password = string(line[0:len(line) - 1])
+		pdu.Password = string(line[0 : len(line)-1])
 	}
 	// Read system type
 	line, err = r.ReadBytes(0x00)
 	if err != nil {
-		err = os.NewError("Bind: Error reading system type")
+		err = errors.New("Bind: Error reading system type")
 		return
 	}
 	if len(line) > 1 {
-		pdu.SystemType = string(line[0:len(line) - 1])
+		pdu.SystemType = string(line[0 : len(line)-1])
 	}
 	// Read interface version
 	c, err := r.ReadByte()
 	if err != nil {
-		err = os.NewError("Bind: Error reading interface version")
+		err = errors.New("Bind: Error reading interface version")
 		return
 	}
 	pdu.IfVersion = uint8(c)
 	// Read TON
 	c, err = r.ReadByte()
 	if err != nil {
-		err = os.NewError("Bind: Error reading default type of number")
+		err = errors.New("Bind: Error reading default type of number")
 		return
 	}
 	pdu.AddrTon = SMPPTypeOfNumber(c)
 	// Read NPI
 	c, err = r.ReadByte()
 	if err != nil {
-		err = os.NewError("Bind: Error reading default number plan indicator")
+		err = errors.New("Bind: Error reading default number plan indicator")
 		return
 	}
 	pdu.AddrNpi = SMPPNumericPlanIndicator(c)
 	// Read Address range
 	line, err = r.ReadBytes(0x00)
 	if err != nil {
-		err = os.NewError("Bind Response: Error reading system type")
+		err = errors.New("Bind Response: Error reading system type")
 		return
 	}
 	if len(line) > 1 {
-		pdu.AddressRange = string(line[0:len(line) - 1])
+		pdu.AddressRange = string(line[0 : len(line)-1])
 	}
 	return
 }
 
 // Write Bind PDU
-func (pdu *PDUBind) write(w *bufio.Writer) (err os.Error) {
+func (pdu *PDUBind) write(w *bufio.Writer) (err error) {
 	// Write Header
 	err = pdu.Header.write(w)
 	if err != nil {
-		err = os.NewError("Bind: Error writing Header")
+		err = errors.New("Bind: Error writing Header")
 		return
 	}
 	// Create byte array the size of the PDU
-	p := make([]byte, pdu.Header.CmdLength - pdu.OptionalLen - 16)
+	p := make([]byte, pdu.Header.CmdLength-pdu.OptionalLen-16)
 	pos := 0
 	// Copy system id
 	if len(pdu.SystemId) > 0 {
 		copy(p[pos:len(pdu.SystemId)], []byte(pdu.SystemId))
 		pos += len(pdu.SystemId)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Copy Password
 	if len(pdu.Password) > 0 {
-		copy(p[pos:pos + len(pdu.Password)], []byte(pdu.Password))
+		copy(p[pos:pos+len(pdu.Password)], []byte(pdu.Password))
 		pos += len(pdu.Password)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Copy system type
 	if len(pdu.SystemType) > 0 {
-		copy(p[pos:pos + len(pdu.SystemType)], []byte(pdu.SystemType))
+		copy(p[pos:pos+len(pdu.SystemType)], []byte(pdu.SystemType))
 		pos += len(pdu.SystemType)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Add interface version
 	p[pos] = byte(pdu.IfVersion)
-	pos ++
+	pos++
 	// Add TON
 	p[pos] = byte(pdu.AddrTon)
-	pos ++
+	pos++
 	// Add NPI
 	p[pos] = byte(pdu.AddrNpi)
-	pos ++
+	pos++
 	// Copy Address range
 	if len(pdu.AddressRange) > 0 {
-		copy(p[pos:pos + len(pdu.AddressRange)], []byte(pdu.AddressRange))
+		copy(p[pos:pos+len(pdu.AddressRange)], []byte(pdu.AddressRange))
 		pos += len(pdu.AddressRange)
 	}
 	// Write to buffer
 	_, err = w.Write(p)
 	if err != nil {
-		err = os.NewError("Bind: Error writing to buffer")
+		err = errors.New("Bind: Error writing to buffer")
 		return
 	}
 	// Flush write buffer
 	err = w.Flush()
 	if err != nil {
-		err = os.NewError("Bind: Error flushing write buffer")
+		err = errors.New("Bind: Error flushing write buffer")
 	}
 	return
 }
@@ -221,26 +221,26 @@ func (pdu *PDUBind) GetStruct() interface{} {
 // Bind Response PDU
 type PDUBindResp struct {
 	PDUCommon
-	SystemId	string
+	SystemId string
 }
 
 // Read Bind Response PDU
-func (pdu *PDUBindResp) read(r *bufio.Reader) (err os.Error) {
+func (pdu *PDUBindResp) read(r *bufio.Reader) (err error) {
 	// Read system id (null terminated string or null)
 	line, err := r.ReadBytes(0x00)
 	if err != nil {
-		err = os.NewError("Bind Response: Error reading system id")
+		err = errors.New("Bind Response: Error reading system id")
 		return
 	}
 	if len(line) > 1 {
-		pdu.SystemId = string(line[0:len(line) - 1])
+		pdu.SystemId = string(line[0 : len(line)-1])
 	}
 	// Read Optional param
-	if pdu.Header.CmdLength > uint32(len(pdu.SystemId)) + 17 {
+	if pdu.Header.CmdLength > uint32(len(pdu.SystemId))+17 {
 		op := new(pduOptParam)
 		err = op.read(r)
 		if err != nil {
-			err = os.NewError("Bind Response: Error reading Optional param")
+			err = errors.New("Bind Response: Error reading Optional param")
 			return
 		}
 		pdu.Optional = OptParams{SMPPOptionalParamTag(op.tag): op.value}
@@ -249,37 +249,37 @@ func (pdu *PDUBindResp) read(r *bufio.Reader) (err os.Error) {
 }
 
 // Write Bind Response PDU
-func (pdu *PDUBindResp) write(w *bufio.Writer) (err os.Error) {
+func (pdu *PDUBindResp) write(w *bufio.Writer) (err error) {
 	// Write Header
 	err = pdu.Header.write(w)
 	if err != nil {
-		err = os.NewError("Bind Response: Error writing Header")
+		err = errors.New("Bind Response: Error writing Header")
 		return
 	}
 	// Create byte array the size of the PDU
-	p := make([]byte, pdu.Header.CmdLength - pdu.OptionalLen - 16)
+	p := make([]byte, pdu.Header.CmdLength-pdu.OptionalLen-16)
 	pos := 0
 	// Copy system id
 	if len(pdu.SystemId) > 0 {
 		copy(p[pos:len(pdu.SystemId)], []byte(pdu.SystemId))
 		pos += len(pdu.SystemId)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Write to buffer
 	_, err = w.Write(p)
 	if err != nil {
-		err = os.NewError("Bind Response: Error writing to buffer")
+		err = errors.New("Bind Response: Error writing to buffer")
 		return
 	}
 	// Flush write buffer
 	err = w.Flush()
 	if err != nil {
-		err = os.NewError("Bind Response: Error flushing write buffer")
+		err = errors.New("Bind Response: Error flushing write buffer")
 	}
 	// Optional params
 	err = pdu.writeOptional(w)
 	if err != nil {
-		err = os.NewError("Bind Response: Error writing optional params")
+		err = errors.New("Bind Response: Error writing optional params")
 	}
 	return
 }
@@ -295,16 +295,16 @@ type PDUUnbind struct {
 }
 
 // Read Unbind PDU
-func (pdu *PDUUnbind) read(r *bufio.Reader) (err os.Error) {
+func (pdu *PDUUnbind) read(r *bufio.Reader) (err error) {
 	return
 }
 
 // Write Unbind PDU
-func (pdu *PDUUnbind) write(w *bufio.Writer) (err os.Error) {
+func (pdu *PDUUnbind) write(w *bufio.Writer) (err error) {
 	// Write Header
 	err = pdu.Header.write(w)
 	if err != nil {
-		err = os.NewError("Unbind: Error writing Header")
+		err = errors.New("Unbind: Error writing Header")
 	}
 	return
 }
@@ -320,16 +320,16 @@ type PDUUnbindResp struct {
 }
 
 // Read Unbind Response PDU
-func (pdu *PDUUnbindResp) read(r *bufio.Reader) (err os.Error) {
+func (pdu *PDUUnbindResp) read(r *bufio.Reader) (err error) {
 	return
 }
 
 // Write Unbind Response PDU
-func (pdu *PDUUnbindResp) write(w *bufio.Writer) (err os.Error) {
+func (pdu *PDUUnbindResp) write(w *bufio.Writer) (err error) {
 	// Write Header
 	err = pdu.Header.write(w)
 	if err != nil {
-		err = os.NewError("Unbind Response: Error writing Header")
+		err = errors.New("Unbind Response: Error writing Header")
 	}
 	return
 }
@@ -342,129 +342,129 @@ func (pdu *PDUUnbindResp) GetStruct() interface{} {
 // Submit SM PDU
 type PDUSubmitSM struct {
 	PDUCommon
-	ServiceType	string
-	SourceAddrTon	SMPPTypeOfNumber
-	SourceAddrNpi	SMPPNumericPlanIndicator
-	SourceAddr	string
-	DestAddrTon	SMPPTypeOfNumber
-	DestAddrNpi	SMPPNumericPlanIndicator
-	DestAddr	string
-	EsmClass	SMPPEsmClassESME
-	ProtocolId	uint8
-	PriorityFlag	SMPPPriority
-	SchedDelTime	string
-	ValidityPeriod	string
-	RegDelivery	SMPPDelivery
-	ReplaceFlag	uint8
-	DataCoding	SMPPDataCoding
-	SmDefaultMsgId	uint8
-	SmLength	uint8
-	ShortMessage	string
+	ServiceType    string
+	SourceAddrTon  SMPPTypeOfNumber
+	SourceAddrNpi  SMPPNumericPlanIndicator
+	SourceAddr     string
+	DestAddrTon    SMPPTypeOfNumber
+	DestAddrNpi    SMPPNumericPlanIndicator
+	DestAddr       string
+	EsmClass       SMPPEsmClassESME
+	ProtocolId     uint8
+	PriorityFlag   SMPPPriority
+	SchedDelTime   string
+	ValidityPeriod string
+	RegDelivery    SMPPDelivery
+	ReplaceFlag    uint8
+	DataCoding     SMPPDataCoding
+	SmDefaultMsgId uint8
+	SmLength       uint8
+	ShortMessage   string
 }
 
 // Read SubmitSM PDU
-func (pdu *PDUSubmitSM) read(r *bufio.Reader) (err os.Error) {
+func (pdu *PDUSubmitSM) read(r *bufio.Reader) (err error) {
 	return
 }
 
 // Write SubmitSM PDU
-func (pdu *PDUSubmitSM) write(w *bufio.Writer) (err os.Error) {
+func (pdu *PDUSubmitSM) write(w *bufio.Writer) (err error) {
 	// Write Header
 	err = pdu.Header.write(w)
 	if err != nil {
-		err = os.NewError("SubmitSM: Error writing Header")
+		err = errors.New("SubmitSM: Error writing Header")
 		return
 	}
 	// Create byte array the size of the PDU
-	p := make([]byte, pdu.Header.CmdLength - pdu.OptionalLen - 16)
+	p := make([]byte, pdu.Header.CmdLength-pdu.OptionalLen-16)
 	pos := 0
 	// Copy service type
 	if len(pdu.ServiceType) > 0 {
 		copy(p[pos:len(pdu.ServiceType)], []byte(pdu.ServiceType))
 		pos += len(pdu.ServiceType)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Source TON
 	p[pos] = byte(pdu.SourceAddrTon)
-	pos ++
+	pos++
 	// Source NPI
 	p[pos] = byte(pdu.SourceAddrNpi)
-	pos ++
+	pos++
 	// Source Address
 	if len(pdu.SourceAddr) > 0 {
-		copy(p[pos:pos + len(pdu.SourceAddr)], []byte(pdu.SourceAddr))
+		copy(p[pos:pos+len(pdu.SourceAddr)], []byte(pdu.SourceAddr))
 		pos += len(pdu.SourceAddr)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Destination TON
 	p[pos] = byte(pdu.DestAddrTon)
-	pos ++
+	pos++
 	// Destination NPI
 	p[pos] = byte(pdu.DestAddrNpi)
-	pos ++
+	pos++
 	// Destination Address
 	if len(pdu.DestAddr) > 0 {
-		copy(p[pos:pos + len(pdu.DestAddr)], []byte(pdu.DestAddr))
+		copy(p[pos:pos+len(pdu.DestAddr)], []byte(pdu.DestAddr))
 		pos += len(pdu.DestAddr)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// ESM Class
 	p[pos] = byte(pdu.EsmClass)
-	pos ++
+	pos++
 	// Protocol Id
 	p[pos] = byte(pdu.ProtocolId)
-	pos ++
+	pos++
 	// Priority Flag
 	p[pos] = byte(pdu.PriorityFlag)
-	pos ++
+	pos++
 	// Sheduled Delivery Time
 	if len(pdu.SchedDelTime) > 0 {
-		copy(p[pos:pos + len(pdu.SchedDelTime)], []byte(pdu.SchedDelTime))
+		copy(p[pos:pos+len(pdu.SchedDelTime)], []byte(pdu.SchedDelTime))
 		pos += len(pdu.SchedDelTime)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Validity Period
 	if len(pdu.ValidityPeriod) > 0 {
-		copy(p[pos:pos + len(pdu.ValidityPeriod)], []byte(pdu.ValidityPeriod))
+		copy(p[pos:pos+len(pdu.ValidityPeriod)], []byte(pdu.ValidityPeriod))
 		pos += len(pdu.ValidityPeriod)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Registered Delivery
 	p[pos] = byte(pdu.RegDelivery)
-	pos ++
+	pos++
 	// Replace Flag
 	p[pos] = byte(pdu.ReplaceFlag)
-	pos ++
+	pos++
 	// Data Coding
 	p[pos] = byte(pdu.DataCoding)
-	pos ++
+	pos++
 	// Default Msg Id
 	p[pos] = byte(pdu.SmDefaultMsgId)
-	pos ++
+	pos++
 	// Msg Length
 	p[pos] = byte(pdu.SmLength)
-	pos ++
+	pos++
 	// Message
 	if len(pdu.ShortMessage) > 0 {
-		copy(p[pos:pos + len(pdu.ShortMessage)], []byte(pdu.ShortMessage))
+		copy(p[pos:pos+len(pdu.ShortMessage)], []byte(pdu.ShortMessage))
 		pos += len(pdu.ShortMessage)
 	}
 	// Write to buffer
 	_, err = w.Write(p)
 	if err != nil {
-		err = os.NewError("SubmitSM: Error writing to buffer")
+		err = errors.New("SubmitSM: Error writing to buffer")
 		return
 	}
 	// Flush write buffer
 	err = w.Flush()
 	if err != nil {
-		err = os.NewError("SubmitSM: Error flushing write buffer")
+		err = errors.New("SubmitSM: Error flushing write buffer")
 		return
 	}
 	// Optional params
 	err = pdu.writeOptional(w)
 	if err != nil {
-		err = os.NewError("SubmitSM: Error writing optional params")
+		err = errors.New("SubmitSM: Error writing optional params")
 	}
 	return
 }
@@ -477,25 +477,25 @@ func (pdu *PDUSubmitSM) GetStruct() interface{} {
 // SubmitSM Response PDU
 type PDUSubmitSMResp struct {
 	PDUCommon
-	MessageId	string
+	MessageId string
 }
 
 // Read SubmitSM Response PDU
-func (pdu *PDUSubmitSMResp) read(r *bufio.Reader) (err os.Error) {
+func (pdu *PDUSubmitSMResp) read(r *bufio.Reader) (err error) {
 	// Read message id (null terminated string or null)
 	line, err := r.ReadBytes(0x00)
 	if err != nil {
-		err = os.NewError("SubmitSM Response: Error reading message id")
+		err = errors.New("SubmitSM Response: Error reading message id")
 		return
 	}
 	if len(line) > 1 {
-		pdu.MessageId = string(line[0:len(line) - 1])
+		pdu.MessageId = string(line[0 : len(line)-1])
 	}
 	return
 }
 
 // Write SubmitSM Response PDU
-func (pdu *PDUSubmitSMResp) write(r *bufio.Writer) (err os.Error) {
+func (pdu *PDUSubmitSMResp) write(r *bufio.Writer) (err error) {
 	return
 }
 
@@ -507,146 +507,146 @@ func (pdu *PDUSubmitSMResp) GetStruct() interface{} {
 // SubmitMulti PDU
 type PDUSubmitMulti struct {
 	PDUCommon
-	ServiceType	string
-	SourceAddrTon	SMPPTypeOfNumber
-	SourceAddrNpi	SMPPNumericPlanIndicator
-	SourceAddr	string
-	NumOfDests	uint8
-	DestAddrTon	SMPPTypeOfNumber
-	DestAddrNpi	SMPPNumericPlanIndicator
-	DestAddrs	[]string
-	DestLists	[]string
-	EsmClass	SMPPEsmClassESME
-	ProtocolId	uint8
-	PriorityFlag	SMPPPriority
-	SchedDelTime	string
-	ValidityPeriod	string
-	RegDelivery	SMPPDelivery
-	ReplaceFlag	uint8
-	DataCoding	SMPPDataCoding
-	SmDefaultMsgId	uint8
-	SmLength	uint8
-	ShortMessage	string
+	ServiceType    string
+	SourceAddrTon  SMPPTypeOfNumber
+	SourceAddrNpi  SMPPNumericPlanIndicator
+	SourceAddr     string
+	NumOfDests     uint8
+	DestAddrTon    SMPPTypeOfNumber
+	DestAddrNpi    SMPPNumericPlanIndicator
+	DestAddrs      []string
+	DestLists      []string
+	EsmClass       SMPPEsmClassESME
+	ProtocolId     uint8
+	PriorityFlag   SMPPPriority
+	SchedDelTime   string
+	ValidityPeriod string
+	RegDelivery    SMPPDelivery
+	ReplaceFlag    uint8
+	DataCoding     SMPPDataCoding
+	SmDefaultMsgId uint8
+	SmLength       uint8
+	ShortMessage   string
 }
 
 // Read SubmitMulti PDU
-func (pdu *PDUSubmitMulti) read(r *bufio.Reader) (err os.Error) {
+func (pdu *PDUSubmitMulti) read(r *bufio.Reader) (err error) {
 	return
 }
 
 // Write SubmitMulti PDU
-func (pdu *PDUSubmitMulti) write(w *bufio.Writer) (err os.Error) {
+func (pdu *PDUSubmitMulti) write(w *bufio.Writer) (err error) {
 	// Write Header
 	err = pdu.Header.write(w)
 	if err != nil {
-		err = os.NewError("SubmitMulti: Error writing Header")
+		err = errors.New("SubmitMulti: Error writing Header")
 		return
 	}
 	// Create byte array the size of the PDU
-	p := make([]byte, pdu.Header.CmdLength - pdu.OptionalLen - 16)
+	p := make([]byte, pdu.Header.CmdLength-pdu.OptionalLen-16)
 	pos := 0
 	// Copy service type
 	if len(pdu.ServiceType) > 0 {
 		copy(p[pos:len(pdu.ServiceType)], []byte(pdu.ServiceType))
 		pos += len(pdu.ServiceType)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Source TON
 	p[pos] = byte(pdu.SourceAddrTon)
-	pos ++
+	pos++
 	// Source NPI
 	p[pos] = byte(pdu.SourceAddrNpi)
-	pos ++
+	pos++
 	// Source Address
 	if len(pdu.SourceAddr) > 0 {
-		copy(p[pos:pos + len(pdu.SourceAddr)], []byte(pdu.SourceAddr))
+		copy(p[pos:pos+len(pdu.SourceAddr)], []byte(pdu.SourceAddr))
 		pos += len(pdu.SourceAddr)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Number of destinations
 	p[pos] = byte(pdu.NumOfDests)
-	pos ++
+	pos++
 	// Send destination numbers
 	for _, destNum := range pdu.DestAddrs {
 		// Number indicator
 		p[pos] = byte(0x01)
-		pos ++
+		pos++
 		// Destination TON
 		p[pos] = byte(pdu.DestAddrTon)
-		pos ++
+		pos++
 		// Destination NPI
 		p[pos] = byte(pdu.DestAddrNpi)
-		pos ++
+		pos++
 		// Copy number
-		copy(p[pos:pos + len(destNum)], []byte(destNum))
+		copy(p[pos:pos+len(destNum)], []byte(destNum))
 		pos += len(destNum) + 1
 	}
 	// Send destination lists
 	for _, destList := range pdu.DestLists {
 		// List indicator
 		p[pos] = byte(0x02)
-		pos ++
+		pos++
 		// Copy list name
-		copy(p[pos:pos + len(destList)], []byte(destList))
+		copy(p[pos:pos+len(destList)], []byte(destList))
 		pos += len(destList) + 1
 	}
 	// ESM Class
 	p[pos] = byte(pdu.EsmClass)
-	pos ++
+	pos++
 	// Protocol Id
 	p[pos] = byte(pdu.ProtocolId)
-	pos ++
+	pos++
 	// Priority Flag
 	p[pos] = byte(pdu.PriorityFlag)
-	pos ++
+	pos++
 	// Sheduled Delivery Time
 	if len(pdu.SchedDelTime) > 0 {
-		copy(p[pos:pos + len(pdu.SchedDelTime)], []byte(pdu.SchedDelTime))
+		copy(p[pos:pos+len(pdu.SchedDelTime)], []byte(pdu.SchedDelTime))
 		pos += len(pdu.SchedDelTime)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Validity Period
 	if len(pdu.ValidityPeriod) > 0 {
-		copy(p[pos:pos + len(pdu.ValidityPeriod)], []byte(pdu.ValidityPeriod))
+		copy(p[pos:pos+len(pdu.ValidityPeriod)], []byte(pdu.ValidityPeriod))
 		pos += len(pdu.ValidityPeriod)
 	}
-	pos ++ // Null terminator
+	pos++ // Null terminator
 	// Registered Delivery
 	p[pos] = byte(pdu.RegDelivery)
-	pos ++
+	pos++
 	// Replace Flag
 	p[pos] = byte(pdu.ReplaceFlag)
-	pos ++
+	pos++
 	// Data Coding
 	p[pos] = byte(pdu.DataCoding)
-	pos ++
+	pos++
 	// Default Msg Id
 	p[pos] = byte(pdu.SmDefaultMsgId)
-	pos ++
+	pos++
 	// Msg Length
 	p[pos] = byte(pdu.SmLength)
-	pos ++
+	pos++
 	// Message
 	if len(pdu.ShortMessage) > 0 {
-		copy(p[pos:pos + len(pdu.ShortMessage)], []byte(pdu.ShortMessage))
+		copy(p[pos:pos+len(pdu.ShortMessage)], []byte(pdu.ShortMessage))
 		pos += len(pdu.ShortMessage)
 	}
 	// Write to buffer
 	_, err = w.Write(p)
 	if err != nil {
-		err = os.NewError("SubmitMulti: Error writing to buffer")
+		err = errors.New("SubmitMulti: Error writing to buffer")
 		return
 	}
 	// Flush write buffer
 	err = w.Flush()
 	if err != nil {
-		err = os.NewError("SubmitMulti: Error flushing write buffer")
+		err = errors.New("SubmitMulti: Error flushing write buffer")
 		return
 	}
 	// Optional params
 	err = pdu.writeOptional(w)
 	if err != nil {
-		err = os.NewError("SubmitMulti: Error writing optional params")
+		err = errors.New("SubmitMulti: Error writing optional params")
 	}
 	fmt.Printf("SubmitMulti Header: %#v\n", pdu.Header)
 	fmt.Printf("SubmitMulti p: %#v\nLength p: %d\n", p, len(p))
@@ -661,55 +661,55 @@ func (pdu *PDUSubmitMulti) GetStruct() interface{} {
 // SubmitMulti Response PDU
 type PDUSubmitMultiResp struct {
 	PDUCommon
-	MessageId	string
-	NumUnsuccess	uint8
-	Unsuccess	[]string
-	ErrorCodes	[]uint32
+	MessageId    string
+	NumUnsuccess uint8
+	Unsuccess    []string
+	ErrorCodes   []uint32
 }
 
 // Read SubmitMulti Response PDU
-func (pdu *PDUSubmitMultiResp) read(r *bufio.Reader) (err os.Error) {
+func (pdu *PDUSubmitMultiResp) read(r *bufio.Reader) (err error) {
 	// Read message id (null terminated string or null)
 	line, err := r.ReadBytes(0x00)
 	if err != nil {
-		err = os.NewError("SubmitMulti Response: Error reading message id")
+		err = errors.New("SubmitMulti Response: Error reading message id")
 		return
 	}
 	if len(line) > 1 {
-		pdu.MessageId = string(line[0:len(line) - 1])
+		pdu.MessageId = string(line[0 : len(line)-1])
 	}
 	// Read unsuccessful destinations
 	c, err := r.ReadByte()
 	if err != nil {
-		err = os.NewError("SubmitMulti Response: Error reading number of unsuccessful destinations")
+		err = errors.New("SubmitMulti Response: Error reading number of unsuccessful destinations")
 		return
 	}
 	pdu.NumUnsuccess = uint8(c)
 	// Read Unsuccessful destination numbers
 	pdu.Unsuccess = make([]string, pdu.NumUnsuccess)
 	pdu.ErrorCodes = make([]uint32, pdu.NumUnsuccess)
-	for i := uint8(0); i < pdu.NumUnsuccess; i ++ {
+	for i := uint8(0); i < pdu.NumUnsuccess; i++ {
 		// Discard Ton/Npi
 		p := make([]byte, 2)
 		_, err = r.Read(p)
 		if err != nil {
-			err = os.NewError("SubmitMulti Response: Error reading TON/NPI")
+			err = errors.New("SubmitMulti Response: Error reading TON/NPI")
 			return
 		}
 		// Read Destination
 		line, err = r.ReadBytes(0x00)
 		if err != nil {
-			err = os.NewError("SubmitMulti Response: Error reading destination")
+			err = errors.New("SubmitMulti Response: Error reading destination")
 			return
 		}
 		if len(line) > 1 {
-			pdu.Unsuccess[i] = string(line[0:len(line) - 1])
+			pdu.Unsuccess[i] = string(line[0 : len(line)-1])
 		}
 		// Read Error code
 		p = make([]byte, 4)
 		_, err = r.Read(p)
 		if err != nil {
-			err = os.NewError("SubmitMulti Response: Error reading error code")
+			err = errors.New("SubmitMulti Response: Error reading error code")
 			return
 		}
 		pdu.ErrorCodes[i] = uint32(unpackUint(p))
@@ -718,7 +718,7 @@ func (pdu *PDUSubmitMultiResp) read(r *bufio.Reader) (err os.Error) {
 }
 
 // Write SubmitMulti Response PDU
-func (pdu *PDUSubmitMultiResp) write(r *bufio.Writer) (err os.Error) {
+func (pdu *PDUSubmitMultiResp) write(r *bufio.Writer) (err error) {
 	return
 }
 
@@ -729,14 +729,14 @@ func (pdu *PDUSubmitMultiResp) GetStruct() interface{} {
 
 // PDU Header
 type PDUHeader struct {
-	CmdLength	uint32
-	CmdId		SMPPCommand
-	CmdStatus	SMPPCommandStatus
-	Sequence	uint32
+	CmdLength uint32
+	CmdId     SMPPCommand
+	CmdStatus SMPPCommandStatus
+	Sequence  uint32
 }
 
 // Read PDU Header
-func (hdr *PDUHeader) read(r *bufio.Reader) (err os.Error) {
+func (hdr *PDUHeader) read(r *bufio.Reader) (err error) {
 	// Read all 16 Header bytes
 	p := make([]byte, 16)
 	_, err = r.Read(p)
@@ -745,19 +745,19 @@ func (hdr *PDUHeader) read(r *bufio.Reader) (err os.Error) {
 	}
 	// Convert bytes into Header vars
 	hdr.CmdLength = uint32(unpackUint(p[0:4]))
-	hdr.CmdId     = SMPPCommand(unpackUint(p[4:8]))
+	hdr.CmdId = SMPPCommand(unpackUint(p[4:8]))
 	hdr.CmdStatus = SMPPCommandStatus(unpackUint(p[8:12]))
-	hdr.Sequence  = uint32(unpackUint(p[12:16]))
+	hdr.Sequence = uint32(unpackUint(p[12:16]))
 	return
 }
 
 // Write PDU Header
-func (hdr *PDUHeader) write(w *bufio.Writer) (err os.Error) {
+func (hdr *PDUHeader) write(w *bufio.Writer) (err error) {
 	// Convert Header into byte array
 	p := make([]byte, 16)
-	copy(p[0:4],   packUint(uint64(hdr.CmdLength), 4))
-	copy(p[4:8],   packUint(uint64(hdr.CmdId), 4))
-	copy(p[8:12],  packUint(uint64(hdr.CmdStatus), 4))
+	copy(p[0:4], packUint(uint64(hdr.CmdLength), 4))
+	copy(p[4:8], packUint(uint64(hdr.CmdId), 4))
+	copy(p[8:12], packUint(uint64(hdr.CmdStatus), 4))
 	copy(p[12:16], packUint(uint64(hdr.Sequence), 4))
 	// Write Header
 	_, err = w.Write(p)
@@ -771,20 +771,20 @@ func (hdr *PDUHeader) write(w *bufio.Writer) (err os.Error) {
 
 // Optional paramater
 type pduOptParam struct {
-	tag		uint16
-	length		uint16
-	value		interface{}
+	tag    uint16
+	length uint16
+	value  interface{}
 }
 
 // Read Optional param
-func (op *pduOptParam) read(r *bufio.Reader) (err os.Error) {
+func (op *pduOptParam) read(r *bufio.Reader) (err error) {
 	// Read first 4 descripter bytes
 	p := make([]byte, 4)
 	_, err = r.Read(p)
 	if err != nil {
 		return
 	}
-	op.tag    = uint16(unpackUint(p[0:2]))
+	op.tag = uint16(unpackUint(p[0:2]))
 	op.length = uint16(unpackUint(p[2:4]))
 	// Read value data
 	if op.length > 0 {
@@ -795,14 +795,14 @@ func (op *pduOptParam) read(r *bufio.Reader) (err os.Error) {
 		}
 		// Determine data type of value
 		switch op.tag {
-			case TAG_ADDITIONAL_STATUS_INFO_TEXT, TAG_RECEIPTED_MESSAGE_ID, TAG_SOURCE_SUBADDRESS, TAG_DEST_SUBADDRESS, TAG_NETWORK_ERROR_CODE, TAG_MESSAGE_PAYLOAD, TAG_CALLBACK_NUM, TAG_CALLBACK_NUM_ATAG, TAG_ITS_SESSION_INFO:
-				op.value = string(vp)
-			case TAG_DEST_ADDR_SUBUNIT, TAG_SOURCE_ADDR_SUBUNIT, TAG_DEST_NETWORK_TYPE, TAG_SOURCE_NETWORK_TYPE, TAG_DEST_BEARER_TYPE, TAG_SOURCE_BEARER_TYPE, TAG_SOURCE_TELEMATICS_ID, TAG_PAYLOAD_TYPE, TAG_MS_MSG_WAIT_FACILITIES, TAG_PRIVACY_INDICATOR, TAG_USER_RESPONSE_CODE, TAG_LANGUAGE_INDICATOR, TAG_SAR_TOTAL_SEGMENTS, TAG_SAR_SEGMENT_SEQNUM, TAG_SC_INTERFACE_VERSION, TAG_DISPLAY_TIME, TAG_MS_VALIDITY, TAG_DPF_RESULT, TAG_SET_DPF, TAG_MS_AVAILABILITY_STATUS, TAG_DELIVERY_FAILURE_REASON, TAG_MORE_MESSAGES_TO_SEND, TAG_MESSAGE_STATE, TAG_CALLBACK_NUM_PRES_IND, TAG_NUMBER_OF_MESSAGES, TAG_SMS_SIGNAL, TAG_ITS_REPLY_TYPE, TAG_USSD_SERVICE_OP:
-				op.value = uint8(vp[0])
-			case TAG_DEST_TELEMATICS_ID, TAG_USER_MESSAGE_REFERENCE, TAG_SOURCE_PORT, TAG_DESTINATION_PORT, TAG_SAR_MSG_REF_NUM:
-				op.value = uint16(unpackUint(vp))
-			case TAG_QOS_TIME_TO_LIVE:
-				op.value = uint32(unpackUint(vp))
+		case TAG_ADDITIONAL_STATUS_INFO_TEXT, TAG_RECEIPTED_MESSAGE_ID, TAG_SOURCE_SUBADDRESS, TAG_DEST_SUBADDRESS, TAG_NETWORK_ERROR_CODE, TAG_MESSAGE_PAYLOAD, TAG_CALLBACK_NUM, TAG_CALLBACK_NUM_ATAG, TAG_ITS_SESSION_INFO:
+			op.value = string(vp)
+		case TAG_DEST_ADDR_SUBUNIT, TAG_SOURCE_ADDR_SUBUNIT, TAG_DEST_NETWORK_TYPE, TAG_SOURCE_NETWORK_TYPE, TAG_DEST_BEARER_TYPE, TAG_SOURCE_BEARER_TYPE, TAG_SOURCE_TELEMATICS_ID, TAG_PAYLOAD_TYPE, TAG_MS_MSG_WAIT_FACILITIES, TAG_PRIVACY_INDICATOR, TAG_USER_RESPONSE_CODE, TAG_LANGUAGE_INDICATOR, TAG_SAR_TOTAL_SEGMENTS, TAG_SAR_SEGMENT_SEQNUM, TAG_SC_INTERFACE_VERSION, TAG_DISPLAY_TIME, TAG_MS_VALIDITY, TAG_DPF_RESULT, TAG_SET_DPF, TAG_MS_AVAILABILITY_STATUS, TAG_DELIVERY_FAILURE_REASON, TAG_MORE_MESSAGES_TO_SEND, TAG_MESSAGE_STATE, TAG_CALLBACK_NUM_PRES_IND, TAG_NUMBER_OF_MESSAGES, TAG_SMS_SIGNAL, TAG_ITS_REPLY_TYPE, TAG_USSD_SERVICE_OP:
+			op.value = uint8(vp[0])
+		case TAG_DEST_TELEMATICS_ID, TAG_USER_MESSAGE_REFERENCE, TAG_SOURCE_PORT, TAG_DESTINATION_PORT, TAG_SAR_MSG_REF_NUM:
+			op.value = uint16(unpackUint(vp))
+		case TAG_QOS_TIME_TO_LIVE:
+			op.value = uint32(unpackUint(vp))
 		}
 	} else {
 		op.value = nil
@@ -811,22 +811,22 @@ func (op *pduOptParam) read(r *bufio.Reader) (err os.Error) {
 }
 
 // Write Optional param
-func (op *pduOptParam) write(w *bufio.Writer) (err os.Error) {
+func (op *pduOptParam) write(w *bufio.Writer) (err error) {
 	// Create byte array
-	p := make([]byte, 4 + op.length)
+	p := make([]byte, 4+op.length)
 	copy(p[0:2], packUint(uint64(op.tag), 2))
 	copy(p[2:4], packUint(uint64(op.length), 2))
 	// Determine data type of value
-	v := reflect.NewValue(op.value)
-	switch t := v.(type) {
-		case *reflect.StringValue:
-			copy(p[4:op.length], []byte(op.value.(string)))
-		case *reflect.Uint8Value:
-			p[4] = byte(op.value.(uint8))
-		case *reflect.Uint16Value:
-			copy(p[4:6], packUint(uint64(op.value.(uint16)), 2))
-		case *reflect.Uint32Value:
-			copy(p[4:8], packUint(uint64(op.value.(uint32)), 4))
+	v := reflect.ValueOf(op.value)
+	switch t := v; t.Kind() {
+	case reflect.String:
+		copy(p[4:op.length], []byte(op.value.(string)))
+	case reflect.Uint8:
+		p[4] = byte(op.value.(uint8))
+	case reflect.Uint16:
+		copy(p[4:6], packUint(uint64(op.value.(uint16)), 2))
+	case reflect.Uint32:
+		copy(p[4:8], packUint(uint64(op.value.(uint32)), 4))
 	}
 	// Write to buffer
 	_, err = w.Write(p)
@@ -841,7 +841,7 @@ func (op *pduOptParam) write(w *bufio.Writer) (err os.Error) {
 // Unpack uint from l bytes (big endian)
 func unpackUint(p []byte) (n uint64) {
 	l := uint8(len(p))
-	for i := uint8(0); i < l; i ++ {
+	for i := uint8(0); i < l; i++ {
 		n |= uint64(p[i]) << ((l - i - 1) * 8)
 	}
 	return
@@ -850,7 +850,7 @@ func unpackUint(p []byte) (n uint64) {
 // Pack uint into l bytes (big endian) 
 func packUint(n uint64, l uint8) (p []byte) {
 	p = make([]byte, l)
-	for i := uint8(0); i < l; i ++ {
+	for i := uint8(0); i < l; i++ {
 		p[i] = byte(n >> ((l - i - 1) * 8))
 	}
 	return
