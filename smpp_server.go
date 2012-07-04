@@ -5,5 +5,4 @@
 package smpp
 
 type Server struct {
-
 }
